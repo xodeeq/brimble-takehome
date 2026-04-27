@@ -1,15 +1,16 @@
 # Brimble Platform Feedback
 
 **What I deployed:** The frontend of this take-home assignment
+**Live URL:** https://brimble-takehome.brimble.app
 
-**Time to first successful deploy:** [honest — include any retries or steps that tripped you up]
+**Time to first successful deploy:** 1 attempt!
 
 ---
 
 ## What worked well
 
 - The onboarding flow which highlights and explains sections of the dashboard was really helpful
--
+- I really love the fact that setting "Root directory" for a deployment actually traverses the repo's directories. I have mis-written the root directory on Railway and probably vercel - so many times. This was super helpful and reassurring.
 
 ## Friction
 

@@ -39,6 +39,15 @@ services:
     networks:
       - brimble_net
 
+  # BuildKit daemon — required by railpack build (BUILDKIT_HOST=docker-container://buildkitd).
+  # Runs once; the API's builder containers connect to it via the Docker socket.
+  buildkitd:
+    image: moby/buildkit:latest
+    container_name: buildkitd
+    privileged: true
+    networks:
+      - brimble_net
+
   # The builder image (brimble-builder:latest) is NOT a long-lived service.
   # The API spawns a fresh builder container for each deployment, then removes it.
   # Build the image once before your first deployment:
@@ -46,9 +55,15 @@ services:
   # or: docker build apps/builder -t brimble-builder:latest
 
 volumes:
+  # Explicit names prevent docker-compose from prefixing with the project directory name.
+  # The API references these volumes by name when spawning sibling containers (DooD trap — CLAUDE.md).
   brimble_workspaces:
+    name: brimble_workspaces
   brimble_data:
+    name: brimble_data
 
 networks:
   brimble_net:
     driver: bridge
+    # Explicit name for the same reason — API passes this to NetworkingConfig.EndpointsConfig.
+    name: brimble_net

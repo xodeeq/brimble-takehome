@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/server.ts",
-    "dev": "tsx watch src/server.ts"
+    "dev": "tsx watch src/server.ts",
+    "test": "node --import tsx/esm --test test/pipeline.test.ts"
   },
   "dependencies": {
     "@fastify/cors": "^8.5.0",

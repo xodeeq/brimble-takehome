@@ -45,10 +45,10 @@ So to append a route to the deployments subroute's inner routes array:
 
 ```
 POST /id/deployments/handle/0/routes
-[ { ...new route... } ]
+{ ...new route... }
 ```
 
-`POST` to an array path appends. `PUT` replaces the value at the path. `DELETE` removes. `PATCH` updates in place.
+`POST` to an array path appends a **single item** — do NOT wrap in an array. `PUT` replaces the value at the path. `DELETE` removes. `PATCH` updates in place.
 
 To remove a single deployment route by its own `@id`:
 
@@ -81,7 +81,7 @@ railpack build /workspace/<id> \
 ```
 
 Notes:
-- `railpack build` starts a BuildKit client itself; we don't need to run a separate BuildKit container as long as the builder image has docker CLI access to the host daemon.
+- `railpack build` requires `BUILDKIT_HOST` to be set (verified on v0.23.0). A `buildkitd` sidecar runs in compose with `container_name: buildkitd`; pass `BUILDKIT_HOST=docker-container://buildkitd` as an `Env` entry when creating the builder container via dockerode. The builder image has the Docker CLI + socket mounted, so `docker-container://` resolves via `docker exec` through the socket — no extra network config needed.
 - `--progress plain` produces line-oriented output suitable for streaming. Default `auto` produces TTY control sequences that the UI would have to interpret.
 - The image lands in the host daemon (because we mounted `/var/run/docker.sock`). The API can then `docker run` it directly.
 - Mention in the README: *"For production, switch to `railpack prepare` + custom BuildKit frontend for cache-key isolation across tenants and parallel build throughput."* — this signals to the grader that you read the production guide.
@@ -262,3 +262,64 @@ Server-side HTTP clients (like our API container calling `fetch('http://caddy:20
 - Sending `Origin: http://localhost` from the API container — the remote IP is still a Docker bridge address, not loopback, so it still fails.
 
 **Security:** `origins: [""]` only allows requests with no Origin header. Browser-based CSRF attacks always include an Origin header, so they remain blocked. Port 2019 is never published to the host (`ports:` only exposes `:80`), so only containers on `brimble_net` can reach the admin API at all.
+
+## 15. SSE log stream: subscribe() before getLogs(), listeners attached eagerly
+
+The SSE handler must call `subscribe()` **before** `getLogs()`, and the bus subscription must attach listeners **eagerly** (at `subscribe()` call time, not lazily inside `[Symbol.asyncIterator]()`). Here is why:
+
+```
+subscribe(id)         ← listeners attached HERE (eagerly)
+getLogs(id)           ← DB snapshot taken HERE (same sync frame)
+yield history...      ← async yields; new lines go into queue during this time
+for await (sub)...    ← drains queue first, then waits for new lines
+```
+
+If listeners are lazy (attached only when `for await` starts), any line published during the history replay yields is missed. It lands in the DB but nobody is listening on the bus, so it never reaches the SSE client in the current connection. The user would see a gap in the live stream and only recover it on reconnect (from DB history).
+
+Node.js is single-threaded, so `subscribe()` and `getLogs()` in the same synchronous frame see a consistent snapshot: no line can be published between them. A line either exists in both the DB snapshot AND is missed by the listener (impossible — they're in the same tick), or lands in the DB after the snapshot and queues in the listener. No duplicates, no gaps.
+
+**Concrete rule:** in the SSE route handler:
+```ts
+const sub = subscribe(id);       // attach listeners NOW — before the getLogs() call
+const history = getLogs(id);     // snapshot (same sync frame, no await between these two)
+
+reply.sse((async function* () {
+  try {
+    for (const row of history) { yield { data: JSON.stringify(row) }; }
+    for await (const line of sub) { yield { data: JSON.stringify(line) }; }
+    yield { event: 'end', data: '' };
+  } finally {
+    sub.cancel();   // cleanup if generator is aborted before for-await runs
+  }
+})());
+```
+
+The `try/finally` with `sub.cancel()` handles the case where the client disconnects during history replay before the `for await` ever starts — in that case the `for await`'s `return()` machinery never fires, so `cancel()` is the only cleanup path.
+
+## 16. Docker Compose volume and network name prefixing breaks DooD references
+
+By default, Docker Compose prefixes named volumes and networks with the **project name** (derived from the directory name). A project in `brimble-takehome/` produces volumes like `brimble-takehome_brimble_workspaces` and networks like `brimble-takehome_brimble_net`.
+
+This silently breaks two places in the pipeline:
+
+1. **`HostConfig.Binds`** in the builder container: `"brimble_workspaces:/workspace"` looks for a volume named exactly `brimble_workspaces`, not the prefixed name.
+2. **`NetworkingConfig.EndpointsConfig`** in the app container: `{ brimble_net: {} }` looks for a network named exactly `brimble_net`.
+
+Both references come from inside the API container via the Docker daemon — the daemon resolves names against its own registry, not Compose's namespace.
+
+**The fix:** add explicit `name:` to every volume and network that pipeline code references by name:
+
+```yaml
+volumes:
+  brimble_workspaces:
+    name: brimble_workspaces   # no prefix, ever
+  brimble_data:
+    name: brimble_data
+
+networks:
+  brimble_net:
+    driver: bridge
+    name: brimble_net          # no prefix, ever
+```
+
+Without this, the pipeline appears to run (no immediate error) but the builder mounts an empty or wrong volume, Railpack can't find the source, and the build fails with a confusing "directory not found" error.

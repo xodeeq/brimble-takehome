@@ -16,10 +16,14 @@
             },
             {
               "@id": "deployments",
-              "group": "deployments",
+              "match": [{ "host": ["*.brimble.localhost"] }],
               "handle": [{
                 "handler": "subroute",
-                "routes": []
+                "routes": [
+                  {
+                    "handle": [{ "handler": "static_response", "status_code": 404 }]
+                  }
+                ]
               }]
             }
           ]

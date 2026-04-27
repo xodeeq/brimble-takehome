@@ -174,6 +174,15 @@ A subroute with no matching routes returns an empty 200 in Caddy 2.11. Fixed by 
 
 Approximately 8–10 hours across three sessions (scaffolding, pipeline, UI + polish).
 
+## Live demo
+
+The `deploy` branch carries two small changes needed for hosted deployment (a `SKIP_CADDY_CHECK` guard in the API and `VITE_API_BASE` env-var support in the UI). Everything else is identical to `main`.
+
+- **Frontend (Brimble):** https://brimble-takehome.brimble.app
+- **API (Railway):** https://brimble-api.up.railway.app/api/health
+
+> Note: the Docker pipeline (Railpack builds, Caddy routing, spawned containers) only runs in the full `docker compose up` stack. The hosted API serves requests and persists deployments to SQLite, but build/deploy steps will fail without a Docker socket and Caddy.
+
 ## Brimble platform feedback
 
 See [BRIMBLE_FEEDBACK.md](./BRIMBLE_FEEDBACK.md).

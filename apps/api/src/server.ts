@@ -12,16 +12,18 @@ await fastify.register(FastifySSEPlugin);
 
 initDb();
 
-// Fail loud if Caddy admin API is unreachable — compose healthcheck should prevent this,
-// but defense-in-depth catches misconfigured environments early.
 const caddyUrl = process.env.CADDY_URL ?? 'http://caddy:2019';
-const caddyOk = await fetch(`${caddyUrl}/config/`, { signal: AbortSignal.timeout(5000) })
-  .then((r) => r.ok)
-  .catch(() => false);
 
-if (!caddyOk) {
-  fastify.log.error('cannot reach Caddy admin API — check that caddy service is healthy');
-  process.exit(1);
+// SKIP_CADDY_CHECK=true disables this gate for environments without Caddy (e.g. Railway).
+if (process.env.SKIP_CADDY_CHECK !== 'true') {
+  const caddyOk = await fetch(`${caddyUrl}/config/`, { signal: AbortSignal.timeout(5000) })
+    .then((r) => r.ok)
+    .catch(() => false);
+
+  if (!caddyOk) {
+    fastify.log.error('cannot reach Caddy admin API — check that caddy service is healthy');
+    process.exit(1);
+  }
 }
 
 await fastify.register(deploymentsRoutes);

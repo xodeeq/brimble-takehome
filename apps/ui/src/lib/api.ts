@@ -1,4 +1,4 @@
-export const API_BASE = 'http://api.brimble.localhost';
+export const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://api.brimble.localhost';
 
 export type DeploymentStatus = 'pending' | 'building' | 'deploying' | 'running' | 'failed';
 

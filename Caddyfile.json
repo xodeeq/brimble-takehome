@@ -1,0 +1,30 @@
+{
+  "admin": { "listen": "0.0.0.0:2019", "origins": [""] },
+  "apps": {
+    "http": {
+      "servers": {
+        "brimble": {
+          "listen": [":80"],
+          "routes": [
+            {
+              "match": [{ "host": ["brimble.localhost"] }],
+              "handle": [{ "handler": "reverse_proxy", "upstreams": [{ "dial": "ui:80" }] }]
+            },
+            {
+              "match": [{ "host": ["api.brimble.localhost"] }],
+              "handle": [{ "handler": "reverse_proxy", "upstreams": [{ "dial": "api:3000" }] }]
+            },
+            {
+              "@id": "deployments",
+              "group": "deployments",
+              "handle": [{
+                "handler": "subroute",
+                "routes": []
+              }]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

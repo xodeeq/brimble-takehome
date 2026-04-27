@@ -1,0 +1,11 @@
+{
+  "name": "hello-node",
+  "version": "0.1.0",
+  "description": "Smoke-test app for the Brimble deployment pipeline",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

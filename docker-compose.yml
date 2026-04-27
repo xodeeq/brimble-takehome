@@ -1,0 +1,54 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    # Override default Caddyfile entrypoint; load our JSON config directly.
+    command: caddy run --config /etc/caddy/caddy.json
+    ports:
+      - "80:80"
+    # 2019 is NOT published to the host — admin API is compose-internal only.
+    volumes:
+      - ./Caddyfile.json:/etc/caddy/caddy.json:ro
+    networks:
+      - brimble_net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:2019/config/"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+
+  api:
+    build: ./apps/api
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Named volume — required by the DooD volume-path constraint.
+      # The daemon resolves mount paths on the HOST, not inside this container.
+      # We pass this volume by name when spawning builder containers.
+      - brimble_workspaces:/workspaces
+      - brimble_data:/data
+    networks:
+      - brimble_net
+    depends_on:
+      caddy:
+        condition: service_healthy
+    environment:
+      DB_PATH: /data/brimble.db
+      PORT: "3000"
+
+  ui:
+    build: ./apps/ui
+    networks:
+      - brimble_net
+
+  # The builder image (brimble-builder:latest) is NOT a long-lived service.
+  # The API spawns a fresh builder container for each deployment, then removes it.
+  # Build the image once before your first deployment:
+  #   ./scripts/build-builder.sh
+  # or: docker build apps/builder -t brimble-builder:latest
+
+volumes:
+  brimble_workspaces:
+  brimble_data:
+
+networks:
+  brimble_net:
+    driver: bridge
